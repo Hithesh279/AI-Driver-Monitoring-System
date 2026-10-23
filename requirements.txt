@@ -1,0 +1,31 @@
+# Core Computer Vision & ML
+opencv-python>=4.8.0
+mediapipe>=0.10.0
+protobuf>=4.25.0,<5.0.0
+ultralytics>=8.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+scikit-learn>=1.3.0
+
+# Backend & Web Interface
+fastapi>=0.100.0
+uvicorn>=0.22.0
+websockets>=11.0
+jinja2>=3.1.0
+pydantic>=2.0.0
+
+# Testing
+pytest>=7.0.0
+
+# Voice alerts (offline TTS, pretrained OS engine — no training/API key)
+pyttsx3>=2.90
+
+# Optional: only used if DMS_GPS_MODE=ip (approximate location via IP)
+requests>=2.31.0
+
+# .env file loading
+python-dotenv>=1.0.0
+
+# Optional, Windows only — makes pyttsx3 (SAPI5) reliable when run from a
+# background thread. Safe to leave uninstalled on Linux/macOS (code checks).
+pywin32; sys_platform == 'win32'

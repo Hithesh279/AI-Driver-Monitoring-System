@@ -1,0 +1,7 @@
+# Pyrefly Configuration for Driver Monitoring System
+search-path = [
+  ".",
+  "core",
+  "ui",
+  "database"
+]

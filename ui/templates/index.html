@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GuardianDrive AI — Driver Monitoring System</title>
+<!-- Leaflet CSS for universal interactive mapping fallback -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --text: #e6edf3; --sub: #8b949e;
+    --green: #22c55e; --amber: #eab308; --red: #ef4444; --blue: #3b82f6; --purple: #a855f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  header {
+    padding: 14px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: #11161d;
+  }
+  header h1 { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  header .session { color: var(--sub); font-size: 13px; }
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+
+  .layout {
+    display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 16px;
+    padding: 16px 24px; max-width: 1440px; margin: 0 auto;
+  }
+  @media (max-width: 1024px) { .layout { grid-template-columns: 1fr; } }
+
+  .video-card {
+    background: #000; border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  .video-card img { width: 100%; display: block; }
+
+  .risk-banner {
+    position: absolute; top: 12px; left: 12px; padding: 8px 14px;
+    border-radius: 8px; font-weight: 700; font-size: 14px;
+    background: rgba(13, 17, 23, 0.85); border: 1px solid var(--border);
+    backdrop-filter: blur(4px);
+  }
+
+  .speed-banner {
+    position: absolute; top: 12px; right: 12px; padding: 6px 12px;
+    border-radius: 8px; font-weight: 600; font-size: 13px;
+    background: rgba(13, 17, 23, 0.85); border: 1px solid var(--border);
+    color: var(--blue);
+  }
+
+  .controls { display: flex; gap: 8px; padding: 12px 0; flex-wrap: wrap; align-items: center; }
+  button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  button:hover { border-color: #58a6ff; background: #21262d; }
+  button.primary { background: #238636; border-color: #2ea043; color: #fff; }
+  button.primary:hover { background: #2ea043; }
+  .sos-btn {
+    background: #dc2626 !important;
+    border-color: #ef4444 !important;
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.5px;
+    box-shadow: 0 0 12px rgba(220, 38, 38, 0.6);
+  }
+  .sos-btn:hover {
+    background: #b91c1c !important;
+    transform: scale(1.03);
+  }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  .panel h2 {
+    font-size: 13px; margin: 0 0 12px 0; color: var(--sub); text-transform: uppercase;
+    letter-spacing: .06em; display: flex; justify-content: space-between; align-items: center;
+  }
+
+  .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .metric { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .metric .label { font-size: 11px; color: var(--sub); }
+  .metric .value { font-size: 19px; font-weight: 700; margin-top: 3px; }
+
+  /* Map Container */
+  #mapContainer {
+    width: 100%; height: 260px; border-radius: 10px; border: 1px solid var(--border);
+    background: #0d1117; overflow: hidden; position: relative;
+  }
+  .map-meta {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; color: var(--sub); margin-top: 8px;
+  }
+
+  /* Safe Haven Cards */
+  .haven-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .haven-card {
+    background: #0d1117; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .haven-card:hover { border-color: #58a6ff; }
+  .haven-title { font-weight: 600; font-size: 13px; color: #f0f6fc; display: flex; align-items: center; gap: 6px; }
+  .haven-sub { font-size: 11px; color: var(--sub); margin: 3px 0 8px 0; }
+  .haven-btn {
+    background: #1f6feb; border: none; color: #fff; padding: 6px 10px;
+    border-radius: 6px; font-size: 12px; font-weight: 600; text-align: center;
+    text-decoration: none; display: block;
+  }
+  .haven-btn:hover { background: #388bfd; }
+
+  /* Stress / Emotion Meter */
+  .stress-bar-bg { width: 100%; height: 8px; background: #21262d; border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  .stress-bar-fill { height: 100%; width: 10%; background: var(--green); transition: width 0.3s ease, background-color 0.3s ease; }
+  .emotion-badge {
+    display: inline-block; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 13px;
+  }
+
+  .reasons { list-style: none; padding: 0; margin: 10px 0 0 0; font-size: 13px; }
+  .reasons li { padding: 6px 10px; background: #0d1117; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid var(--amber); }
+
+  .alert-log { max-height: 180px; overflow-y: auto; font-size: 12px; }
+  .alert-log div { padding: 6px 0; border-bottom: 1px solid var(--border); color: var(--sub); }
+  .alert-log .type { color: var(--text); font-weight: 600; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 999;
+    align-items: center; justify-content: center;
+  }
+  .modal {
+    background: #161b22; border: 1px solid var(--border); border-radius: 14px;
+    width: 90%; max-width: 680px; max-height: 85vh; overflow-y: auto; padding: 24px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .modal-tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .tab-btn { background: transparent; border: none; padding: 6px 12px; color: var(--sub); cursor: pointer; border-radius: 6px; }
+  .tab-btn.active { background: #21262d; color: var(--text); font-weight: 600; }
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; font-size: 12px; color: var(--sub); margin-bottom: 4px; font-weight: 500; }
+  .form-control {
+    width: 100%; box-sizing: border-box; background: #0d1117; border: 1px solid var(--border);
+    color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 13px; outline: none;
+  }
+  .form-control:focus { border-color: #58a6ff; }
+  .toast {
+    position: fixed; bottom: 20px; right: 20px; background: #238636; color: #fff;
+    padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 13px;
+    display: none; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+</style>
+<!-- Leaflet JS for universal map rendering -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+</head>
+<body>
+
+<header>
+  <h1>🚗 GuardianDrive AI <span style="font-size:12px; font-weight:400; color:var(--sub); margin-left:6px;">High-Accuracy Driver Safety Co-Pilot</span></h1>
+  <div class="header-actions">
+    <button onclick="triggerSOS()" class="sos-btn" title="Immediately send emergency email with vehicle location & speed to safety contacts">🚨 EMERGENCY SOS</button>
+    <button onclick="openTripModal()" style="background:#1f6feb; border-color:#388bfd; color:#fff; font-weight:600;" title="Register driver & passenger details before trip">📋 Trip &amp; Occupants</button>
+    <button onclick="calibrateDriver()" title="Lock driver's normal resting posture for ultra-high accuracy">📐 Calibrate Baseline</button>
+    <button onclick="openReportsModal()" class="primary">📊 Driving Reports</button>
+    <span class="session" id="sessionLabel">Connecting…</span>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- LEFT COLUMN: Video Stream & Interactive Google Maps Integration -->
+  <div>
+    <div class="video-card">
+      <div class="risk-banner" id="riskBanner" style="color:#22c55e;">Safe &amp; Attentive (Low)</div>
+      <div class="speed-banner" id="speedBanner" style="color:#94a3b8;">🛑 0 km/h · Stopped</div>
+      <img src="/video_feed" alt="Live driver video stream">
+    </div>
+
+    <!-- Live Hardware Sensor Controls & Baseline Calibration -->
+    <div class="controls">
+      <button onclick="calibrateDriver()" style="background:#238636; color:#fff; font-weight:600;">📐 Calibrate Face Baseline</button>
+      <span style="color:#58a6ff; font-size:12px; margin-left:8px; display:inline-flex; align-items:center; gap:6px;">
+        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#22c55e;"></span>
+        Hardware Live Sensing: Optical Face Mesh (30 FPS) &bull; Authentic Device GPS Active
+      </span>
+    </div>
+
+    <!-- Interactive Google Maps Integration Section -->
+    <div class="panel">
+      <h2>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>🗺️ Live Google Maps Navigation &amp; Safe Haven Routing</span>
+          <span id="mapEngineBadge" style="font-size:11px; padding:2px 8px; border-radius:12px; background:rgba(56,189,248,0.12); color:#38bdf8; font-weight:600;">Universal Map</span>
+        </div>
+        <a id="externalMapsLink" href="#" target="_blank" style="color:#58a6ff; font-size:12px; text-decoration:none;">Open in Google Maps ↗</a>
+      </h2>
+      <div id="mapContainer"></div>
+      <div class="map-meta">
+        <div><b>Coordinates:</b> <span id="mapCoords">—</span></div>
+        <div><b>Heading:</b> <span id="mapHeading">0° N</span> &nbsp;|&nbsp; <b>Route Trail:</b> <span id="mapTrailPoints">0</span> pts</div>
+      </div>
+
+      <!-- Safe Havens (Auto-populates Rest Stops & Emergency Havens) -->
+      <div style="margin-top:14px;">
+        <div style="font-size:12px; font-weight:600; color:var(--sub); text-transform:uppercase;">
+          Nearby Emergency Safe Havens (1-Click Google Maps Directions)
+        </div>
+        <div class="haven-grid" id="havenGrid">
+          <div style="color:var(--sub); font-size:12px; grid-column:span 2; padding:8px 0;">Searching nearby rest areas and hospitals…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN: Telemetry & Safety Analytics -->
+  <div>
+    <!-- Active Trip & Passenger Emergency Routing Panel -->
+    <div class="panel" id="tripPanel" style="border-left: 3px solid #388bfd;">
+      <h2>
+        <span>📋 Trip &amp; Occupant Details</span>
+        <button onclick="openTripModal()" style="background:transparent; border:1px solid var(--border); color:#58a6ff; font-size:11px; padding:3px 8px; border-radius:4px; cursor:pointer;">Update Trip</button>
+      </h2>
+      <div style="font-size:12px; line-height:1.7;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <span style="color:var(--sub);">Passenger Name:</span>
+          <span id="tripPassengerDisplay" style="font-weight:600; color:#f0f6fc;">Not Registered</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <span style="color:var(--sub);">Emergency Contact Email:</span>
+          <span id="tripEmergencyDisplay" style="font-weight:600; color:#38bdf8;">None (Click Update Trip)</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <span style="color:var(--sub);">Driver Name:</span>
+          <span id="tripDriverDisplay" style="color:#c9d1d9;">Registered Driver</span>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:var(--sub);">Vehicle &amp; Trip ID:</span>
+          <span id="tripVehicleDisplay" style="color:var(--sub);">AP-04-REG-01 &bull; TRIP-INIT</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fused Risk Assessment Panel -->
+    <div class="panel">
+      <h2>
+        <span>Fused Risk Engine (Random Forest + Rules)</span>
+        <span id="mlModelBadge" style="font-size:11px; color:#58a6ff; font-weight:normal;">RF ML Active</span>
+      </h2>
+      <div class="metric-grid" style="margin-bottom:10px;">
+        <div class="metric">
+          <div class="label">Fused Safety Risk Score</div>
+          <div class="value" id="riskScore">0.00</div>
+        </div>
+        <div class="metric">
+          <div class="label">Risk Band</div>
+          <div class="value" id="riskBandVal" style="color:#22c55e;">Low</div>
+        </div>
+      </div>
+      <ul class="reasons" id="reasonsList">
+        <li style="border-left-color:#22c55e;">Attentive road focus — No active risk factors</li>
+      </ul>
+    </div>
+
+    <!-- Emotion & Stress Recognition Panel (PPT Module 03) -->
+    <div class="panel">
+      <h2>
+        <span>Driver Mood &amp; Stress Recognition (FACS)</span>
+        <span class="emotion-badge" id="emotionBadge" style="background:#166534; color:#bbf7d0;">Calm</span>
+      </h2>
+      <div class="metric-grid">
+        <div class="metric">
+          <div class="label">Dominant Emotion</div>
+          <div class="value" id="dominantEmotionVal" style="font-size:16px;">Calm</div>
+        </div>
+        <div class="metric">
+          <div class="label">Psychological Stress Index</div>
+          <div class="value" id="stressScoreVal">10%</div>
+        </div>
+      </div>
+      <div class="stress-bar-bg">
+        <div class="stress-bar-fill" id="stressBarFill"></div>
+      </div>
+    </div>
+
+    <!-- Drowsiness & Fatigue Panel -->
+    <div class="panel">
+      <h2>Drowsiness &amp; Fatigue Metrics (Smoothed)</h2>
+      <div class="metric-grid">
+        <div class="metric"><div class="label">Eye Aspect Ratio (EAR)</div><div class="value" id="earVal">0.00</div></div>
+        <div class="metric"><div class="label">Mouth Aspect Ratio (MAR)</div><div class="value" id="marVal">0.00</div></div>
+        <div class="metric"><div class="label">PERCLOS (60s Fatigue)</div><div class="value" id="perclosVal">0%</div></div>
+        <div class="metric"><div class="label">Blink Frequency</div><div class="value" id="blinkVal">0 bpm</div></div>
+      </div>
+    </div>
+
+    <!-- Head Pose, Gaze & Phone Distraction Panel -->
+    <div class="panel">
+      <h2>Head Pose &amp; Object Detection</h2>
+      <div class="metric-grid">
+        <div class="metric"><div class="label">Yaw (Turn Left/Right)</div><div class="value" id="yawVal">0°</div></div>
+        <div class="metric"><div class="label">Pitch (Up/Down)</div><div class="value" id="pitchVal">0°</div></div>
+        <div class="metric"><div class="label">2D Gaze Orientation</div><div class="value" id="gazeVal" style="font-size:15px;">Forward</div></div>
+        <div class="metric"><div class="label">Driver Phone / Bottle</div><div class="value" id="phoneVal">No</div></div>
+      </div>
+    </div>
+
+    <!-- Safety Advisory & Voice/Email Safeguard -->
+    <div class="panel">
+      <h2>Safety Advisory &amp; Safeguarding Action</h2>
+      <div id="advisoryBox" style="font-size:13px; color:var(--sub); line-height:1.5;">No active hazard advisory.</div>
+      <div class="controls" style="padding-left:0; margin-top:10px;">
+        <button onclick="triggerSOS()" class="sos-btn" style="padding:7px 16px;">🚨 SEND SOS NOW</button>
+        <button onclick="testAlert('PHONE_USAGE')">📱 Test: Phone</button>
+        <button onclick="testAlert('MICROSLEEP_DROWSINESS')">😴 Test: Sleep</button>
+        <button onclick="testAlert('OFF_ROAD_DISTRACTION')">👀 Test: Distract</button>
+      </div>
+    </div>
+
+    <!-- Incident Alerts Log -->
+    <div class="panel">
+      <h2>Recent Session Incidents</h2>
+      <div class="alert-log" id="alertLog"><div>No recorded incidents.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Driving Reports Modal -->
+<div class="modal-overlay" id="reportsModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 style="margin:0; font-size:18px;">📊 Automated Driving Performance Report</h2>
+      <button onclick="closeReportsModal()" style="padding:4px 10px;">✕</button>
+    </div>
+    <div class="modal-tabs">
+      <button class="tab-btn active" onclick="loadReportTab('daily', this)">Daily (24h)</button>
+      <button class="tab-btn" onclick="loadReportTab('weekly', this)">Weekly (7d)</button>
+      <button class="tab-btn" onclick="loadReportTab('monthly', this)">Monthly (30d)</button>
+    </div>
+    <div id="reportContent" style="font-size:13px;">Loading driving insights…</div>
+  </div>
+</div>
+
+<!-- Pre-Trip Registration Modal -->
+<div class="modal-overlay" id="tripModal">
+  <div class="modal" style="max-width:580px;">
+    <div class="modal-header">
+      <h2 style="margin:0; font-size:18px;">📋 Pre-Trip Registration &amp; Safety Routing</h2>
+      <button onclick="closeTripModal()" style="padding:4px 10px;">✕</button>
+    </div>
+    <p style="font-size:12px; color:var(--sub); margin-top:0; margin-bottom:16px; line-height:1.5;">
+      Register the journey before starting. When an emergency happens (driver microsleep, phone distraction, or in-cabin SOS), an automated formal incident report will be dispatched immediately to the <b>Passenger's Emergency Contact Email</b> with live coordinates and speed.
+    </p>
+    <form id="tripForm" onsubmit="handleTripSubmit(event)">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+        <div class="form-group">
+          <label for="driverName">Driver Full Name</label>
+          <input type="text" id="driverName" class="form-control" required placeholder="e.g. Ramesh Kumar">
+        </div>
+        <div class="form-group">
+          <label for="driverEmail">Driver Email (Optional)</label>
+          <input type="text" id="driverEmail" class="form-control" placeholder="driver@transport.com">
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+        <div class="form-group">
+          <label for="passengerName">Passenger Full Name</label>
+          <input type="text" id="passengerName" class="form-control" required placeholder="e.g. Hemanth Kumar">
+        </div>
+        <div class="form-group">
+          <label for="passengerEmergencyEmail">Passenger Emergency Email *</label>
+          <input type="email" id="passengerEmergencyEmail" class="form-control" style="border-color:#388bfd;" required placeholder="family.safety@example.com">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:18px;">
+        <label for="vehicleId">Vehicle Number / Registration ID</label>
+        <input type="text" id="vehicleId" class="form-control" required placeholder="e.g. AP-04-TX-9988">
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button type="button" onclick="closeTripModal()">Cancel</button>
+        <button type="submit" class="primary" style="background:#238636; font-weight:600; padding:8px 20px;">💾 Register &amp; Start Trip</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toastMsg">✓ Baseline Calibrated</div>
+
+<script>
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// WebSocket telemetry client
+let ws;
+function connect() {
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/telemetry");
+  ws.onmessage = (evt) => render(JSON.parse(evt.data));
+  ws.onclose = () => setTimeout(connect, 1500);
+}
+connect();
+
+// -------------------------------------------------------------
+// Interactive Google Maps & Universal Tile Map Dual Engine
+// -------------------------------------------------------------
+let mapEngine = null; // 'google', 'leaflet', or 'offline'
+let isMapInitializing = false;
+let currentLat = 14.4673;
+let currentLon = 78.8242;
+let lastPannedLat = null;
+let lastPannedLon = null;
+let lastHavensSignature = "";
+
+// Leaflet engine state
+let leafletMap = null;
+let leafletVehicleMarker = null;
+let leafletRoutePolyline = null;
+let leafletHavenMarkers = [];
+
+// Google Maps Platform engine state
+let googleMap = null;
+let googleVehicleMarker = null;
+let googleRoutePolyline = null;
+let googleHavenMarkers = [];
+let googleMapsConfig = null;
+let GmpMap = null;
+let GmpAdvancedMarkerElement = null;
+
+function setupGoogleMapsLoader(apiKey) {
+  if (window.google?.maps?.importLibrary) return;
+  (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
+    key: apiKey,
+    v: "weekly"
+  });
+}
+
+async function initMap() {
+  const container = document.getElementById('mapContainer');
+  if (!container || isMapInitializing || mapEngine) return;
+  isMapInitializing = true;
+
+  try {
+    const res = await fetch('/api/maps/config');
+    googleMapsConfig = await res.json();
+  } catch (err) {
+    console.warn("Could not fetch maps config, using defaults:", err);
+    googleMapsConfig = { has_api_key: false, api_key: "" };
+  }
+
+  const badge = document.getElementById('mapEngineBadge');
+
+  // Option 1: Google Maps Platform Engine (if API Key provided)
+  if (googleMapsConfig && googleMapsConfig.has_api_key && googleMapsConfig.api_key) {
+    try {
+      setupGoogleMapsLoader(googleMapsConfig.api_key);
+      const { Map } = await google.maps.importLibrary("maps");
+      const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
+      GmpMap = Map;
+      GmpAdvancedMarkerElement = AdvancedMarkerElement;
+
+      if (badge) {
+        badge.innerText = "Google Maps Platform";
+        badge.style.color = "#38bdf8";
+        badge.style.background = "rgba(56,189,248,0.15)";
+      }
+
+      const mapOptions = {
+        center: { lat: currentLat, lng: currentLon },
+        zoom: googleMapsConfig.zoom || 15,
+        mapId: googleMapsConfig.map_id || "DEMO_MAP_ID",
+        disableDefaultUI: false,
+        zoomControl: true,
+        streetViewControl: false,
+        mapTypeControl: false,
+        fullscreenControl: false,
+        internalUsageAttributionIds: ['gmp_git_agentskills_v1']
+      };
+
+      googleMap = new GmpMap(container, mapOptions);
+
+      const carPin = document.createElement('div');
+      carPin.className = 'gmp-vehicle-pin';
+      carPin.innerHTML = '<div style="background:#2563eb; width:18px; height:18px; border-radius:50%; border:3px solid #ffffff; box-shadow:0 0 14px #38bdf8;"></div>';
+
+      googleVehicleMarker = new GmpAdvancedMarkerElement({
+        map: googleMap,
+        position: { lat: currentLat, lng: currentLon },
+        title: "GuardianDrive Vehicle",
+        content: carPin,
+        internalUsageAttributionIds: ['gmp_git_agentskills_v1']
+      });
+
+      googleRoutePolyline = new google.maps.Polyline({
+        path: (googleMapsConfig.breadcrumbs || []).map(p => ({ lat: p[0], lng: p[1] })),
+        geodesic: true,
+        strokeColor: '#38bdf8',
+        strokeOpacity: 0.85,
+        strokeWeight: 4,
+        map: googleMap
+      });
+
+      mapEngine = 'google';
+      lastPannedLat = currentLat;
+      lastPannedLon = currentLon;
+      lastHavensSignature = ""; // force marker render
+      isMapInitializing = false;
+      return;
+    } catch (gErr) {
+      console.warn("Failed to load Google Maps Platform SDK, falling back to Leaflet:", gErr);
+    }
+  }
+
+  // Option 2: Universal Leaflet Fallback Engine (Zero-Config, OSM Tiles)
+  if (typeof L !== 'undefined') {
+    try {
+      if (badge) {
+        badge.innerText = "Universal Interactive Map";
+        badge.style.color = "#94a3b8";
+        badge.style.background = "rgba(148,163,184,0.12)";
+      }
+
+      leafletMap = L.map('mapContainer', {
+        center: [currentLat, currentLon],
+        zoom: 14,
+        zoomControl: true
+      });
+
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
+        maxZoom: 19
+      }).addTo(leafletMap);
+
+      const carIcon = L.divIcon({
+        className: 'vehicle-marker',
+        html: '<div style="background:#2563eb; width:16px; height:16px; border-radius:50%; border:3px solid #fff; box-shadow:0 0 12px #3b82f6;"></div>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      });
+
+      leafletVehicleMarker = L.marker([currentLat, currentLon], { icon: carIcon }).addTo(leafletMap);
+      leafletRoutePolyline = L.polyline([], { color: '#38bdf8', weight: 4, opacity: 0.85 }).addTo(leafletMap);
+
+      mapEngine = 'leaflet';
+      lastPannedLat = currentLat;
+      lastPannedLon = currentLon;
+      lastHavensSignature = ""; // force marker render
+      isMapInitializing = false;
+      return;
+    } catch (e) {
+      console.error("Leaflet initialization warning:", e);
+    }
+  }
+
+  // Option 3: Offline GPS Telemetry Radar Fallback (when completely disconnected from internet)
+  if (badge) {
+    badge.innerText = "Offline GPS Telemetry Grid";
+    badge.style.color = "#22c55e";
+    badge.style.background = "rgba(34,197,94,0.12)";
+  }
+  container.innerHTML = `
+    <div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:radial-gradient(circle, #132032 0%, #0d1117 100%); color:#94a3b8; font-size:13px; text-align:center; padding:16px;">
+      <div style="width:18px; height:18px; border-radius:50%; background:#2563eb; border:3px solid #fff; box-shadow:0 0 16px #38bdf8; margin-bottom:10px;"></div>
+      <div style="color:#f0f6fc; font-weight:700; margin-bottom:4px;">Live Offline GPS Telemetry Active</div>
+      <div id="offlineMapCoordsText">Lat ${currentLat.toFixed(5)}, Lon ${currentLon.toFixed(5)}</div>
+    </div>
+  `;
+  mapEngine = 'offline';
+  isMapInitializing = false;
+}
+
+function updateMap(gps, speed, heading, breadcrumbs) {
+  if (!gps || gps.lat === undefined || gps.lon === undefined) return;
+  currentLat = gps.lat;
+  currentLon = gps.lon;
+
+  const isLive = gps.is_live_device;
+  document.getElementById('mapCoords').innerHTML = gps.lat.toFixed(5) + ", " + gps.lon.toFixed(5) + 
+    (isLive ? ' <span style="color:#22c55e; font-size:10px; font-weight:700;">● LIVE GPS</span>' : '');
+  document.getElementById('mapHeading').innerText = (heading ? heading.toFixed(0) : "0") + "°";
+  document.getElementById('externalMapsLink').href = "https://www.google.com/maps?q=" + gps.lat + "," + gps.lon;
+
+  const currentSpeed = (speed !== undefined && speed !== null) ? Number(speed) : 0.0;
+  const speedEl = document.getElementById('speedBanner');
+  if (currentSpeed < 1.0) {
+    speedEl.innerHTML = "🛑 0 km/h · Stopped";
+    speedEl.style.color = "#94a3b8";
+  } else {
+    speedEl.innerHTML = "🚗 " + currentSpeed.toFixed(0) + " km/h";
+    speedEl.style.color = "#38bdf8";
+  }
+
+  if (!mapEngine && !isMapInitializing) {
+    initMap();
+  }
+
+  const movedSignificantly = (
+    lastPannedLat === null ||
+    lastPannedLon === null ||
+    Math.abs(gps.lat - lastPannedLat) > 0.00005 ||
+    Math.abs(gps.lon - lastPannedLon) > 0.00005
+  );
+
+  // Update Google Maps Platform instance
+  if (mapEngine === 'google' && googleMap && googleVehicleMarker) {
+    const pos = { lat: gps.lat, lng: gps.lon };
+    googleVehicleMarker.position = pos;
+    if (movedSignificantly) {
+      googleMap.panTo(pos);
+      lastPannedLat = gps.lat;
+      lastPannedLon = gps.lon;
+    }
+
+    if (breadcrumbs && breadcrumbs.length > 0 && googleRoutePolyline) {
+      const gPath = breadcrumbs.map(p => ({ lat: p[0], lng: p[1] }));
+      googleRoutePolyline.setPath(gPath);
+      document.getElementById('mapTrailPoints').innerText = breadcrumbs.length;
+    }
+  }
+
+  // Update Leaflet instance
+  if (mapEngine === 'leaflet' && leafletMap && leafletVehicleMarker) {
+    const newLatLng = [gps.lat, gps.lon];
+    leafletVehicleMarker.setLatLng(newLatLng);
+    if (movedSignificantly) {
+      leafletMap.panTo(newLatLng, { animate: true, duration: 0.8 });
+      lastPannedLat = gps.lat;
+      lastPannedLon = gps.lon;
+    }
+
+    if (breadcrumbs && breadcrumbs.length > 0 && leafletRoutePolyline) {
+      leafletRoutePolyline.setLatLngs(breadcrumbs);
+      document.getElementById('mapTrailPoints').innerText = breadcrumbs.length;
+    }
+  }
+
+  if (mapEngine === 'offline') {
+    const offlineEl = document.getElementById('offlineMapCoordsText');
+    if (offlineEl) {
+      offlineEl.innerText = `Lat ${gps.lat.toFixed(5)}, Lon ${gps.lon.toFixed(5)} · Speed ${currentSpeed.toFixed(1)} km/h`;
+    }
+  }
+}
+
+// Render Safe Havens List (only re-renders DOM & markers when havens data changes)
+function renderSafeHavens(havens) {
+  const grid = document.getElementById('havenGrid');
+  if (!havens || havens.length === 0) return;
+
+  const signature = JSON.stringify(havens.map(h => [h.id, h.name, h.distance_km])) + ":" + (mapEngine || "none");
+  if (signature === lastHavensSignature) {
+    return;
+  }
+  lastHavensSignature = signature;
+
+  grid.innerHTML = havens.slice(0, 4).map(h => `
+    <div class="haven-card">
+      <div>
+        <div class="haven-title"><span>${escapeHtml(h.icon)}</span> ${escapeHtml(h.name)}</div>
+        <div class="haven-sub">${escapeHtml(h.category)} · <b>${escapeHtml(h.distance_km)} km</b> (~${escapeHtml(h.eta_minutes)} mins)</div>
+      </div>
+      <a href="${escapeHtml(h.google_maps_nav_url)}" target="_blank" rel="noopener" class="haven-btn">🚗 Navigate via Google Maps</a>
+    </div>
+  `).join("");
+
+  // Place markers on Google Map if active
+  if (mapEngine === 'google' && googleMap && GmpAdvancedMarkerElement) {
+    googleHavenMarkers.forEach(m => { m.map = null; });
+    googleHavenMarkers = [];
+
+    havens.forEach(h => {
+      if (h.lat && h.lon) {
+        const pin = document.createElement('div');
+        pin.style.fontSize = '20px';
+        pin.style.cursor = 'pointer';
+        pin.title = `${h.name} (${h.category}) - ${h.distance_km} km`;
+        pin.innerText = h.icon || '📍';
+        pin.onclick = () => window.open(h.google_maps_nav_url, '_blank');
+
+        try {
+          const marker = new GmpAdvancedMarkerElement({
+            map: googleMap,
+            position: { lat: h.lat, lng: h.lon },
+            title: h.name,
+            content: pin,
+            internalUsageAttributionIds: ['gmp_git_agentskills_v1']
+          });
+          googleHavenMarkers.push(marker);
+        } catch (e) {}
+      }
+    });
+  }
+
+  // Place markers on Leaflet Map if active
+  if (mapEngine === 'leaflet' && leafletMap) {
+    leafletHavenMarkers.forEach(m => leafletMap.removeLayer(m));
+    leafletHavenMarkers = [];
+
+    havens.forEach(h => {
+      if (h.lat && h.lon) {
+        const havenIcon = L.divIcon({
+          className: 'haven-marker',
+          html: `<div style="font-size:18px; cursor:pointer;" title="${escapeHtml(h.name)}">${escapeHtml(h.icon || '📍')}</div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+        const m = L.marker([h.lat, h.lon], { icon: havenIcon }).addTo(leafletMap);
+        m.bindPopup(`<b>${escapeHtml(h.name)}</b><br>${escapeHtml(h.category)} (${escapeHtml(h.distance_km)} km)<br><a href="${escapeHtml(h.google_maps_nav_url)}" target="_blank" rel="noopener">1-Click Directions</a>`);
+        leafletHavenMarkers.push(m);
+      }
+    });
+  }
+}
+
+// -------------------------------------------------------------
+// Real-Time Telemetry Dashboard Rendering
+// -------------------------------------------------------------
+function riskColor(level) {
+  if (level === "High") return "#ef4444";
+  if (level === "Medium") return "#eab308";
+  return "#22c55e";
+}
+
+function emotionColor(emotion) {
+  if (emotion === "Stressed") return { bg: "#7f1d1d", text: "#fca5a5" };
+  if (emotion === "Frustrated") return { bg: "#831843", text: "#fbcfe8" };
+  if (emotion === "Fatigued") return { bg: "#78350f", text: "#fde68a" };
+  return { bg: "#14532d", text: "#86efac" };
+}
+
+function render(d) {
+  document.getElementById('sessionLabel').innerText = "Session: " + d.session_id + " · " + (d.fps || 30).toFixed(0) + " FPS";
+
+  // Risk Banner & Score
+  const riskEl = document.getElementById('riskBanner');
+  riskEl.innerText = d.status_text + " (" + d.risk_level + ")";
+  riskEl.style.color = riskColor(d.risk_level);
+
+  document.getElementById('riskScore').innerText = d.risk_score.toFixed(2);
+  document.getElementById('riskScore').style.color = riskColor(d.risk_level);
+  document.getElementById('riskBandVal').innerText = d.risk_level;
+  document.getElementById('riskBandVal').style.color = riskColor(d.risk_level);
+
+  // Reasons List
+  const reasons = document.getElementById('reasonsList');
+  reasons.innerHTML = "";
+  (d.primary_reasons || []).forEach(r => {
+    const li = document.createElement('li');
+    li.innerText = r;
+    reasons.appendChild(li);
+  });
+  if (!d.primary_reasons || d.primary_reasons.length === 0) {
+    reasons.innerHTML = '<li style="border-left-color:#22c55e;">Attentive road focus — No active risk factors</li>';
+  }
+
+  // Emotion & Stress
+  const emBadge = document.getElementById('emotionBadge');
+  const emStyle = emotionColor(d.dominant_emotion || "Calm");
+  emBadge.innerText = d.dominant_emotion || "Calm";
+  emBadge.style.background = emStyle.bg;
+  emBadge.style.color = emStyle.text;
+
+  document.getElementById('dominantEmotionVal').innerText = d.dominant_emotion || "Calm";
+  const stressPct = Math.round((d.stress_score || 0.1) * 100);
+  document.getElementById('stressScoreVal').innerText = stressPct + "%";
+  
+  const bar = document.getElementById('stressBarFill');
+  bar.style.width = Math.max(5, Math.min(100, stressPct)) + "%";
+  bar.style.background = stressPct > 65 ? "#ef4444" : (stressPct > 40 ? "#eab308" : "#22c55e");
+
+  // Drowsiness metrics
+  document.getElementById('earVal').innerText = d.ear.toFixed(2);
+  document.getElementById('marVal').innerText = d.mar.toFixed(2);
+  document.getElementById('perclosVal').innerText = (d.perclos * 100).toFixed(0) + "%";
+  document.getElementById('blinkVal').innerText = Math.round(d.blink_rate_bpm) + " bpm";
+
+  // Distraction & Object metrics
+  document.getElementById('yawVal').innerText = d.yaw.toFixed(0) + "°";
+  document.getElementById('pitchVal').innerText = d.pitch.toFixed(0) + "°";
+  document.getElementById('gazeVal').innerText = d.gaze_direction;
+  if (d.phone_detected) {
+    document.getElementById('phoneVal').innerText = "⚠️ Phone in Hand!";
+    document.getElementById('phoneVal').style.color = "#ef4444";
+  } else if (d.bottle_detected) {
+    document.getElementById('phoneVal').innerText = "🍼 Bottle Detected";
+    document.getElementById('phoneVal').style.color = "#eab308";
+  } else {
+    document.getElementById('phoneVal').innerText = "No";
+    document.getElementById('phoneVal').style.color = "#e6edf3";
+  }
+
+  // Map & Havens
+  updateMap(d.gps, d.speed_kmh, d.heading_deg, d.breadcrumbs);
+  if (d.nearby_havens) renderSafeHavens(d.nearby_havens);
+
+  // Advisory
+  if (d.advisories && d.advisories.length > 0) {
+    document.getElementById('advisoryBox').innerHTML = d.advisories.map(a =>
+      `<div style="margin-bottom:8px;"><b style="color:#f87171;">${escapeHtml(a.condition)}</b> (${escapeHtml(a.severity)})<br>
+       <ol style="margin:4px 0 0 16px; padding:0;">${a.steps.map(s => '<li>' + escapeHtml(s) + '</li>').join('')}</ol></div>`
+    ).join("");
+  } else {
+    document.getElementById('advisoryBox').innerHTML = 'No active hazard advisory.';
+  }
+
+  // Trip UI synchronization
+  if (d.trip) {
+    updateTripUI(d.trip);
+  }
+}
+
+// Calibration
+function calibrateDriver() {
+  fetch('/api/calibrate_driver', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      showToast("✓ Baseline Calibrated: EAR, MAR, Head Pose & Emotion zeroed");
+    });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toastMsg');
+  t.innerText = msg;
+  t.style.display = 'block';
+  setTimeout(() => { t.style.display = 'none'; }, 3000);
+}
+
+function triggerSOS() {
+  if (!confirm("🚨 ACTIVATE EMERGENCY SOS?\n\nThis will immediately dispatch an emergency alert email to safety contacts with your vehicle's live GPS coordinates, speed, and emergency distress signal.")) {
+    return;
+  }
+  showToast("🚨 Transmitting Emergency SOS with vehicle location & speed…");
+  fetch('/api/emergency/sos', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.email_enabled && data.email_sent) {
+        showToast("✓ SOS Dispatched: Emergency email sent (" + data.speed_kmh.toFixed(1) + " km/h)");
+      } else if (!data.email_enabled) {
+        showToast("⚠️ SOS Activated (Enable DMS_EMAIL_ENABLED=true in .env for email)");
+      } else {
+        showToast("✓ SOS Activated: Location & Speed Transmitted");
+      }
+      loadHistory();
+    })
+    .catch(e => {
+      showToast("❌ SOS Transmission Error");
+    });
+}
+
+function testAlert(type) {
+  showToast("Testing " + type + "…");
+  fetch('/api/test_alert?alert_type=' + type, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.email_enabled && data.email_sent) {
+        showToast("✓ Safety email sent with vehicle location & speed!");
+      } else {
+        showToast("🔊 Test Alert Triggered: " + type);
+      }
+      loadHistory();
+    });
+}
+
+// -------------------------------------------------------------
+// Driving Performance Reports Modal
+// -------------------------------------------------------------
+function openReportsModal() {
+  document.getElementById('reportsModal').style.display = 'flex';
+  loadReportTab('daily', document.querySelector('.tab-btn'));
+}
+
+function closeReportsModal() {
+  document.getElementById('reportsModal').style.display = 'none';
+}
+
+function loadReportTab(timeframe, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  const content = document.getElementById('reportContent');
+  content.innerHTML = "Computing metrics and generating AI recommendations…";
+
+  fetch('/api/reports/' + timeframe)
+    .then(r => r.json())
+    .then(data => {
+      const rep = data.report;
+      content.innerHTML = `
+        <div style="background:#0d1117; border:1px solid #30363d; border-radius:10px; padding:16px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="color:var(--sub); font-size:11px; text-transform:uppercase;">Overall Driving Safety Score</div>
+            <div style="font-size:36px; font-weight:800; color:${escapeHtml(rep.grade_color)};">${escapeHtml(rep.safety_score)} / 100 <span style="font-size:20px;">(${escapeHtml(rep.grade)})</span></div>
+            <div style="font-weight:600; color:${escapeHtml(rep.grade_color)};">${escapeHtml(rep.rating)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="color:var(--sub); font-size:11px; text-transform:uppercase;">Monitored Drive Time</div>
+            <div style="font-size:22px; font-weight:700;">${escapeHtml(rep.minutes_driven)} mins</div>
+            <div style="color:var(--sub); font-size:12px;">${escapeHtml(rep.total_sessions)} Active Session(s)</div>
+          </div>
+        </div>
+
+        <h3 style="font-size:13px; color:var(--sub); text-transform:uppercase; margin:12px 0 6px 0;">Safety Alert Counts</h3>
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:14px;">
+          <div class="metric"><div class="label">Microsleeps</div><div class="value" style="color:#ef4444;">${escapeHtml(rep.alert_breakdown.MICROSLEEP_DROWSINESS)}</div></div>
+          <div class="metric"><div class="label">Phone Instances</div><div class="value" style="color:#ef4444;">${escapeHtml(rep.alert_breakdown.PHONE_USAGE)}</div></div>
+          <div class="metric"><div class="label">Distractions</div><div class="value" style="color:#eab308;">${escapeHtml(rep.alert_breakdown.OFF_ROAD_DISTRACTION)}</div></div>
+          <div class="metric"><div class="label">Total Alerts</div><div class="value">${escapeHtml(rep.total_alerts)}</div></div>
+        </div>
+
+        <h3 style="font-size:13px; color:var(--sub); text-transform:uppercase; margin:12px 0 6px 0;">AI Coaching & Recommendations</h3>
+        <ul style="padding-left:20px; line-height:1.6; margin:0 0 16px 0;">
+          ${rep.recommendations.map(r => `<li>${escapeHtml(r)}</li>`).join("")}
+        </ul>
+
+        <div style="text-align:right;">
+          <a href="/api/reports_view/html?timeframe=${encodeURIComponent(timeframe)}" target="_blank" style="background:#238636; color:#fff; text-decoration:none; padding:8px 14px; border-radius:6px; font-size:13px; font-weight:600;">🖨️ Open Full Printable Report</a>
+        </div>
+      `;
+    });
+}
+
+// Alert History polling (displays newest incidents at the top, with safe HTML escaping)
+async function loadHistory() {
+  try {
+    const res = await fetch('/api/session/history');
+    const data = await res.json();
+    const log = document.getElementById('alertLog');
+    if (!data.alerts || data.alerts.length === 0) {
+      log.innerHTML = '<div>No recorded incidents.</div>';
+      return;
+    }
+    log.innerHTML = data.alerts.map(a => {
+      const timeStr = a.timestamp ? new Date(a.timestamp * 1000).toLocaleTimeString() : "";
+      const sev = escapeHtml(a.severity || "HIGH");
+      return `<div><span class="type">${escapeHtml(a.alert_type)}</span> <span style="font-size:10px; color:#58a6ff;">[${sev}]</span> — risk ${Number(a.trigger_value).toFixed(2)} <span style="float:right; font-size:11px;">${escapeHtml(timeStr)}</span><br>${escapeHtml(a.details || "")}</div>`;
+    }).join("");
+  } catch (e) {}
+}
+setInterval(loadHistory, 4000);
+loadHistory();
+
+// Start authentic live client GPS streaming from device hardware
+function startLiveDeviceGeolocation() {
+  if ("geolocation" in navigator) {
+    navigator.geolocation.watchPosition(
+      (pos) => {
+        const liveLat = pos.coords.latitude;
+        const liveLon = pos.coords.longitude;
+        const speedKmh = (pos.coords.speed !== null && pos.coords.speed >= 0) ? (pos.coords.speed * 3.6) : 0.0;
+        const heading = (pos.coords.heading !== null && !isNaN(pos.coords.heading)) ? pos.coords.heading : 0.0;
+
+        fetch('/api/gps/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lat: liveLat,
+            lon: liveLon,
+            speed_kmh: speedKmh,
+            heading_deg: heading
+          })
+        }).catch(() => {});
+      },
+      (err) => {
+        console.log("Device Geolocation:", err.message);
+      },
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+    );
+  }
+}
+
+// -------------------------------------------------------------
+// Pre-Trip Registration & Emergency Contact Routing
+// -------------------------------------------------------------
+function openTripModal() {
+  const modal = document.getElementById('tripModal');
+  modal.style.display = 'flex';
+
+  fetch('/api/trip/current')
+    .then(r => r.json())
+    .then(resp => {
+      const trip = resp.trip || {};
+      const saved = JSON.parse(localStorage.getItem('dms_trip_data') || '{}');
+
+      const dName = (trip.driver_name && trip.driver_name !== "Registered Driver") ? trip.driver_name : (saved.driver_name || "");
+      const dEmail = trip.driver_email || saved.driver_email || "";
+      const pName = (trip.passenger_name && trip.passenger_name !== "Registered Passenger") ? trip.passenger_name : (saved.passenger_name || "");
+      const pEmail = trip.passenger_emergency_email || saved.passenger_emergency_email || "";
+      const vId = (trip.vehicle_id && trip.vehicle_id !== "AP-04-REG-01") ? trip.vehicle_id : (saved.vehicle_id || "");
+
+      if (document.activeElement !== document.getElementById('driverName')) {
+        document.getElementById('driverName').value = dName;
+      }
+      if (document.activeElement !== document.getElementById('driverEmail')) {
+        document.getElementById('driverEmail').value = dEmail;
+      }
+      if (document.activeElement !== document.getElementById('passengerName')) {
+        document.getElementById('passengerName').value = pName;
+      }
+      if (document.activeElement !== document.getElementById('passengerEmergencyEmail')) {
+        document.getElementById('passengerEmergencyEmail').value = pEmail;
+      }
+      if (document.activeElement !== document.getElementById('vehicleId')) {
+        document.getElementById('vehicleId').value = vId;
+      }
+    })
+    .catch(() => {});
+}
+
+function closeTripModal() {
+  const modal = document.getElementById('tripModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function handleTripSubmit(e) {
+  e.preventDefault();
+  const driverName = document.getElementById('driverName').value.trim();
+  const driverEmail = document.getElementById('driverEmail').value.trim();
+  const passengerName = document.getElementById('passengerName').value.trim();
+  const emergencyEmail = document.getElementById('passengerEmergencyEmail').value.trim();
+  const vehicleId = document.getElementById('vehicleId').value.trim();
+
+  if (!emergencyEmail) {
+    alert("Please enter the passenger's emergency contact email.");
+    return;
+  }
+
+  const tripData = {
+    driver_name: driverName || "Driver",
+    driver_email: driverEmail,
+    passenger_name: passengerName || "Passenger",
+    passenger_emergency_email: emergencyEmail,
+    vehicle_id: vehicleId || "AP-04-REG-01"
+  };
+
+  fetch('/api/trip/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tripData)
+  })
+  .then(r => r.json())
+  .then(resp => {
+    if (resp.status === 'success') {
+      localStorage.setItem('dms_trip_data', JSON.stringify(tripData));
+      updateTripUI(resp.trip);
+      closeTripModal();
+      showToast("✓ Trip Updated: Alerts routed to " + emergencyEmail);
+    } else {
+      alert("Error saving trip: " + (resp.message || "Unknown error"));
+    }
+  })
+  .catch(err => {
+    console.error("Trip start error:", err);
+    alert("Network error updating trip particulars.");
+  });
+}
+
+function updateTripUI(trip) {
+  if (!trip) return;
+  const pName = (trip.passenger_name && trip.passenger_name !== "Registered Passenger") ? trip.passenger_name : "Not Registered";
+  const pEmail = trip.passenger_emergency_email || "None (Click Update Trip)";
+  const dName = (trip.driver_name && trip.driver_name !== "Registered Driver") ? trip.driver_name : "Registered Driver";
+  const dEmailText = trip.driver_email ? ' (' + trip.driver_email + ')' : '';
+  const vText = (trip.vehicle_id || "AP-04-REG-01") + ' • ' + (trip.trip_id || "ACTIVE");
+
+  const pDisp = document.getElementById('tripPassengerDisplay');
+  if (pDisp) pDisp.innerText = pName;
+  const emDisp = document.getElementById('tripEmergencyDisplay');
+  if (emDisp) emDisp.innerText = pEmail;
+  const dDisp = document.getElementById('tripDriverDisplay');
+  if (dDisp) dDisp.innerText = dName + dEmailText;
+  const vDisp = document.getElementById('tripVehicleDisplay');
+  if (vDisp) vDisp.innerText = vText;
+}
+
+function loadCurrentTrip() {
+  fetch('/api/trip/current')
+    .then(r => r.json())
+    .then(resp => {
+      if (resp.trip && resp.trip.trip_id && (resp.trip.driver_name || resp.trip.passenger_name)) {
+        updateTripUI(resp.trip);
+      } else {
+        const saved = localStorage.getItem('dms_trip_data');
+        if (saved) {
+          try {
+            const data = JSON.parse(saved);
+            fetch('/api/trip/start', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data)
+            }).then(r => r.json()).then(res => {
+              if (res.trip) updateTripUI(res.trip);
+            });
+          } catch(e) {}
+        }
+      }
+    })
+    .catch(() => {});
+}
+
+// Close modals when clicking outside or pressing Escape
+window.addEventListener('click', (e) => {
+  const tripModal = document.getElementById('tripModal');
+  if (e.target === tripModal) closeTripModal();
+  const repModal = document.getElementById('reportsModal');
+  if (e.target === repModal) closeReportsModal();
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === "Escape") {
+    closeTripModal();
+    closeReportsModal();
+  }
+});
+
+window.addEventListener('load', () => {
+  initMap();
+  startLiveDeviceGeolocation();
+  loadCurrentTrip();
+});
+</script>
+
+</body>
+</html>
